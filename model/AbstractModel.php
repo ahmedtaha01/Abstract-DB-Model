@@ -67,8 +67,9 @@ class AbstractModel{
     }
 
     public function update($columns_values,$condition){
-        if($this->sanitize_column_value($columns_values) && $this->sanitize_column_value($condition)){
-            $this->statement = 'UPDATE '.static::$TABLE_NAME.' SET '. $columns_values.' WHERE '.$condition;
+        $queriedData = $this->establish_evironment($columns_values);
+        if($this->sanitize_column_value($condition)){
+            $this->statement = 'UPDATE '.static::$TABLE_NAME.' SET '. $this->return_table_columns_values($queriedData).' WHERE '.$condition;
         } else {
             $this->valid = false;   
         }
@@ -162,8 +163,8 @@ class AbstractModel{
         return $array;
     }
 
-    private function return_table_columns_values(){       //imploding both  //nice for update
-        return http_build_query(static::$TABLE_VALUES,'',', ');
+    private function return_table_columns_values($array){       //imploding both  //nice for update
+        return urldecode(http_build_query($array,'',','));
     }
 
     private function sanitize_column_value($all){
