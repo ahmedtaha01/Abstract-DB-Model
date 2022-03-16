@@ -1,20 +1,21 @@
 <?php
 namespace PHPMVC\MODEL;
 use PHPMVC\LIB\Database;
-use PHPMVC\LIB\Paginate;
-// date ----->  '".date('Y-m-d')."'
+
 
 class AbstractModel{
     private $con;
     private $statement;
     protected static $TABLE_NAME;      
-    protected static $TABLE_COLUMNS;       // table columns , must put in array
+    protected static $TABLE_COLUMNS_BINDED_VALUE;
 
     private $valid = true;                 // checking for errors
                                            // method chainging can't be broke
     private $operators = array('>','=','<','ASC','DESC');    // add operators ,if you want ,for WHERE 
     
     private $tables = array('users','items','comments','categories');
+    private $name_bindValue_value_array;
+
     //paginate
     public $pagenum;       //current page
     private $offset;        //
@@ -24,9 +25,11 @@ class AbstractModel{
         $this->con = new Database;
     }
 
-    public function select($columns){       // selected columns    
-        $data = $this->return_table_values($columns);
-        $this->statement = 'SELECT '.$data.' FROM '.static::$TABLE_NAME;
+    public function select($columns = '*'){       // selected columns
+        if($columns != '*'){
+            $columns = $this->return_table_values($columns);
+        }
+        $this->statement = 'SELECT '.$columns.' FROM '.static::$TABLE_NAME;
         return $this;
     }
 
@@ -52,20 +55,18 @@ class AbstractModel{
     }
 
     public function insert($values){
-        $queriedData = $this->establish_evironment($values);
-        $this->statement = 'INSERT INTO '.static::$TABLE_NAME.' ('.$this->return_table_columns($queriedData).') '.
-        'VALUES '.'('.$this->return_table_values($queriedData).')';
+        $array = $this->establish_name_bindValue_value_array($values);
+        $this->statement = 'INSERT INTO '.static::$TABLE_NAME.' ('.$this->return_table_columns($array).') '.
+        'VALUES '.'('.$this->return_table_bindValues($array).')';
         
         return $this;
     }
 
-    public function update($columns_values,$condition){
-        $queriedData = $this->establish_evironment($columns_values);
-        if($this->sanitize_column_value($condition)){
-            $this->statement = 'UPDATE '.static::$TABLE_NAME.' SET '. $this->return_table_columns_values($queriedData).' WHERE '.$condition;
-        } else {
-            $this->valid = false;   
-        }
+    public function update($columns_values){
+        $array = $this->establish_name_bindValue_value_array($columns_values);
+        
+        $this->statement = 'UPDATE '.static::$TABLE_NAME.' SET '. $this->return_table_column_bindValue($array);
+
         return $this;
     }
 
@@ -104,8 +105,16 @@ class AbstractModel{
         if($this->valid){
             var_dump($this->statement);
             $this->con->query($this->statement);
+            if(!empty($this->name_bindValue_value_array)){
+                foreach($this->name_bindValue_value_array as $key => $value){
+                    $this->con->bindValues($value[0],$value[1]);
+                }
+            }
+            
             $this->statement = null; //--------> as statement remain exist after execution
-            return $this->con->execute();    //so we need to null it for futher querys
+            $this->name_bindValue_value_array = null;    //so we need to null it for futher querys
+            
+            return $this->con->execute();    
         }
         return false;
     }
@@ -129,20 +138,12 @@ class AbstractModel{
         }
     }
 
-    private function return_table_columns($array){
-        return implode(', ',array_keys($array));
-    }
-
-    private function return_table_values($array){
-        return implode(', ',$array);
-    }
-
-    private function establish_evironment($array){       // creating the environment
+    private function establish_name_bindValue_value_array($array){
         foreach($array as $key1 => $value1){             // insert and update
             $found = false;
-            foreach(static::$TABLE_COLUMNS as $key2){
+            foreach(static::$TABLE_COLUMNS_BINDED_VALUE as $key2 => $bind_value){       // name ==> value array
                 if($key1 == $key2){
-                    $array[$key2] = "'$value1'";
+                    $array[$key2] = array($bind_value,$value1);
                     $found = true;
                     break;
                 }
@@ -151,34 +152,28 @@ class AbstractModel{
                 unset($array[$key1]);
             }
         }
+        
+        $this->name_bindValue_value_array = $array;
         return $array;
     }
 
-    private function return_table_columns_values($array){       //imploding both  //nice for update
-        return urldecode(http_build_query($array,'',','));
+    private function return_table_columns($array){
+        return implode(', ',array_keys($array));    //return keys
     }
 
-    private function sanitize_column_value($all){
-        $sentence = explode(',',$all);
-        foreach($sentence as $se){
-            $column = explode('=',$se);
-            if(!$this->sanitize_columns($column[0])){
-                return false;
-            }
-            $this->sanitize_values($column[1]);
-        }
-        return true;
+    private function return_table_values($array){
+        return implode(', ',$array);     //return values
+    }
+    private function return_table_bindValues($array){
+        return implode(', ',array_column($array,0));     //return bind values
     }
 
-    private function sanitize_column_column($all){
-        $sentence = explode(',',$all);
-        foreach($sentence as $se){
-            $column = explode('=',$se);
-            if($this->sanitize_columns($column[0]) && $this->sanitize_columns($column[1])){
-                return true;
-            }
+    private function return_table_column_bindValue($array){    //espicially for updates
+        $s = '';
+        foreach($array as $key => $value){
+            $s = $s . $key .'='.$value[0].',';
         }
-        return false;
+        return rtrim($s, ", ");
     }
 
     private function sanitize_table($table){
@@ -194,7 +189,7 @@ class AbstractModel{
         if($columns != '*'){
             $split = explode(',',$columns);
             foreach($split as $sp){
-                if(!in_array(trim($sp) , static::$TABLE_COLUMNS)){
+                if(!in_array(trim($sp) , array_keys(static::$TABLE_COLUMNS_BINDED_VALUE))){
                     return false;
                 }
             }
@@ -217,7 +212,13 @@ class AbstractModel{
     }
 }
 
+ // private function return_table_columns_values($array){       //imploding both  //nice for update
+//     return urldecode(http_build_query($array,'',','));
+// }
 
+// return implode(', ',array_column($array,0));     //return bind values
+// return implode(', ',array_column($array,1));     //return values
+// return implode(', ',array_keys($array));          return keys
 
 
 
