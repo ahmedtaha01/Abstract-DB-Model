@@ -24,21 +24,14 @@ class AbstractModel{
         $this->con = new Database;
     }
 
-    public function select($columns){       // selected columns          
-        if($this->sanitize_columns($columns)){      // checking for manipulation
-            $this->statement = 'SELECT '.$columns.' FROM '.static::$TABLE_NAME;
-        } else {
-            $this->valid = false;   
-        }
+    public function select($columns){       // selected columns    
+        $data = $this->return_table_values($columns);
+        $this->statement = 'SELECT '.$data.' FROM '.static::$TABLE_NAME;
         return $this;
     }
 
     public function count($column,$alias = 'num'){               
-        if($this->sanitize_columns($column)){      
-            $this->statement = 'SELECT COUNT('.$column.') as '.$alias.' FROM '.static::$TABLE_NAME;
-        } else {
-            $this->valid = false;   
-        }
+        $this->statement = 'SELECT COUNT('.$column.') as '.$alias.' FROM '.static::$TABLE_NAME;
         return $this;
     }
 
@@ -53,7 +46,7 @@ class AbstractModel{
 
     public function on($condition){
         
-            $this->statement = $this->statement . ' ON '.$condition; 
+        $this->statement = $this->statement . ' ON '.$condition; 
         
         return $this;
     }
@@ -77,7 +70,7 @@ class AbstractModel{
     }
 
     public function where($column , $condition , $value){
-        if($this->sanitize_columns($column) && $this->sanitize_operators($condition)){
+        if($this->sanitize_operators($condition)){
             $value = $this->sanitize_values($value);
             $this->statement = $this->statement.' WHERE '.$column.' '.$condition.' '.$value;
         } else {
@@ -113,9 +106,8 @@ class AbstractModel{
             $this->con->query($this->statement);
             $this->statement = null; //--------> as statement remain exist after execution
             return $this->con->execute();    //so we need to null it for futher querys
-        } else {
-            echo 'error';
         }
+        return false;
     }
 
     public function get(){
@@ -124,9 +116,8 @@ class AbstractModel{
             $this->con->query($this->statement);
             $this->statement = null; //--------> as statement remain exist after execution
             return $this->con->resultSet();    //so we need to null it for futher querys
-        } else {
-            echo 'error';
         }
+        return false;
    
     }
 
@@ -147,7 +138,7 @@ class AbstractModel{
     }
 
     private function establish_evironment($array){       // creating the environment
-        foreach($array as $key1 => $value1){
+        foreach($array as $key1 => $value1){             // insert and update
             $found = false;
             foreach(static::$TABLE_COLUMNS as $key2){
                 if($key1 == $key2){
